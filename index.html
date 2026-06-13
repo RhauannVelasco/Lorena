@@ -2,22 +2,22 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Lorena ♥</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #000008;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
     overflow: hidden;
+    width: 100vw;
+    height: 100vh;
   }
   canvas {
     display: block;
-    width: 100vw;
-    height: 100vh;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
   }
 </style>
 </head>
@@ -26,256 +26,380 @@
 <script>
 (function(){
 const cv = document.getElementById('hc');
-function resize(){
-  cv.width  = window.innerWidth;
-  cv.height = window.innerHeight;
+const g  = cv.getContext('2d');
+
+// --- dimensões ---
+let W, H, CX, CY, BSC;
+function setDims(){
+  W   = window.innerWidth;
+  H   = window.innerHeight;
+  cv.width  = W;
+  cv.height = H;
+  CX  = W / 2;
+  CY  = H / 2 + H * 0.03;
+  BSC = Math.min(W, H) / 38;
 }
-resize();
-window.addEventListener('resize', resize);
+setDims();
 
-const g = cv.getContext('2d');
-
-function W(){ return cv.width; }
-function H(){ return cv.height; }
-function CX(){ return W()/2; }
-function CY(){ return H()/2 + H()*0.03; }
-function BSC(){ return Math.min(W(),H())/38; }
-
+// --- coração paramétrico ---
 function hpt(t, sc){
-  const x = 16*Math.pow(Math.sin(t),3);
-  const y = -(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t));
-  return {x: CX()+x*sc, y: CY()+y*sc};
+  const x = 16 * Math.pow(Math.sin(t), 3);
+  const y = -(13*Math.cos(t) - 5*Math.cos(2*t) - 2*Math.cos(3*t) - Math.cos(4*t));
+  return { x: CX + x*sc, y: CY + y*sc };
 }
 
-// Gera pontos do coração
+// --- pontos do texto ---
+let pts = [];
 function buildPts(){
+  const isMobile = Math.min(W,H) < 500;
   const shells = [
-    { sc: BSC()*0.72, n: 55, fs: BSC()*0.19, alpha: 0.38, shimSpeed: 1.1 },
-    { sc: BSC(),      n: 80, fs: BSC()*0.30, alpha: 0.75, shimSpeed: 0.8 },
-    { sc: BSC()*1.06, n: 30, fs: BSC()*0.22, alpha: 0.28, shimSpeed: 1.4 },
+    { sc: BSC*0.72, n: isMobile?38:55, fsMul: 0.17, alpha: 0.38, shimSpeed: 1.1 },
+    { sc: BSC,      n: isMobile?55:80, fsMul: 0.27, alpha: 0.75, shimSpeed: 0.8 },
+    { sc: BSC*1.06, n: isMobile?20:30, fsMul: 0.19, alpha: 0.28, shimSpeed: 1.4 },
   ];
-  const pts = [];
+  pts = [];
   for(const sh of shells){
-    for(let i=0;i<sh.n;i++){
-      const t=(i/sh.n)*Math.PI*2;
-      const p=hpt(t,sh.sc);
-      const normY=(p.y-(CY()-sh.sc*13))/(sh.sc*26);
-      const fs=sh.fs+normY*sh.fs*0.7;
+    for(let i = 0; i < sh.n; i++){
+      const t = (i / sh.n) * Math.PI * 2;
+      const p = hpt(t, sh.sc);
+      const normY = (p.y - (CY - sh.sc*13)) / (sh.sc*26);
+      const fs = sh.fsMul*BSC + normY*sh.fsMul*BSC*0.7;
       pts.push({
-        ...p, fs:Math.max(6,fs),
-        alpha:sh.alpha,
-        shimSpeed:sh.shimSpeed*(0.7+Math.random()*0.6),
-        shimOffset:Math.random()*Math.PI*2,
-        floatA:1.2+Math.random()*2.5,
-        floatF:0.3+Math.random()*0.5,
-        floatP:Math.random()*Math.PI*2,
-        floatAy:0.6+Math.random()*1.4,
-        floatFy:0.25+Math.random()*0.4,
-        floatPy:Math.random()*Math.PI*2,
+        ...p,
+        fs: Math.max(6, Math.min(fs, isMobile ? 14 : 20)),
+        alpha: sh.alpha,
+        shimSpeed:  sh.shimSpeed * (0.7 + Math.random()*0.6),
+        shimOffset: Math.random() * Math.PI * 2,
+        floatA:  1.2 + Math.random()*2.5,
+        floatF:  0.3 + Math.random()*0.5,
+        floatP:  Math.random() * Math.PI * 2,
+        floatAy: 0.6 + Math.random()*1.4,
+        floatFy: 0.25 + Math.random()*0.4,
+        floatPy: Math.random() * Math.PI * 2,
       });
     }
   }
-  return pts;
 }
-let pts = buildPts();
-window.addEventListener('resize', ()=>{ pts=buildPts(); });
+buildPts();
 
-const dust = Array.from({length:120},()=>({
-  x:Math.random()*window.innerWidth,
-  y:Math.random()*window.innerHeight,
-  r:0.5+Math.random()*2,
-  a:Math.random()*Math.PI*2,
-  spd:0.08+Math.random()*0.18,
-  drift:(Math.random()-.5)*0.3,
-  alpha:0.1+Math.random()*0.35,
-  col:Math.random()<0.5?[80,160,255]:[180,220,255],
-}));
+// --- partículas de poeira ---
+let dust = [];
+function buildDust(){
+  dust = Array.from({ length: Math.min(120, Math.floor(W*H/6000)) }, () => ({
+    x: Math.random()*W, y: Math.random()*H,
+    r: 0.5 + Math.random()*2,
+    a: Math.random()*Math.PI*2,
+    spd: 0.08 + Math.random()*0.18,
+    drift: (Math.random()-.5)*0.3,
+    alpha: 0.1 + Math.random()*0.35,
+    col: Math.random()<0.5 ? [80,160,255] : [180,220,255],
+  }));
+}
+buildDust();
 
-const fhearts=[];
+// --- corações flutuantes ---
+const fhearts = [];
 function spawnFH(){
   fhearts.push({
-    x:Math.random()*window.innerWidth,
-    y:window.innerHeight+10,
-    vy:-(0.4+Math.random()*0.5),
-    vx:(Math.random()-.5)*0.3,
-    alpha:0, size:8+Math.random()*12,
-    life:0, maxLife:180+Math.random()*120,
-    col:Math.random()<0.6?'#4da6ff':'#b3d9ff',
+    x: Math.random()*W, y: H+10,
+    vy: -(0.4 + Math.random()*0.5),
+    vx: (Math.random()-.5)*0.3,
+    alpha: 0, size: 8 + Math.random()*12,
+    life: 0, maxLife: 180 + Math.random()*120,
+    col: Math.random()<0.6 ? '#4da6ff' : '#b3d9ff',
   });
 }
 for(let i=0;i<10;i++) spawnFH();
 
-let nameReveal=0;
-const NAME_DELAY=90;
-let nameGlowPhase=0;
+// --- touch: estoura corações no toque ---
+function onTouch(e){
+  const touches = e.changedTouches || [e];
+  for(const t of touches){
+    const tx = t.clientX, ty = t.clientY;
+    for(let i=0;i<6;i++){
+      const angle = (i/6)*Math.PI*2;
+      const spd = 1 + Math.random()*1.5;
+      fhearts.push({
+        x: tx, y: ty,
+        vx: Math.cos(angle)*spd,
+        vy: Math.sin(angle)*spd - 0.5,
+        alpha: 0, size: 10 + Math.random()*14,
+        life: 0, maxLife: 90 + Math.random()*60,
+        col: Math.random()<0.6 ? '#4da6ff' : '#ffffff',
+      });
+    }
+  }
+}
+cv.addEventListener('touchstart', onTouch, { passive: true });
+cv.addEventListener('click', onTouch);
 
-function drawShimmerText(px,py,fontSize,pointAlpha,shimSpeed,shimOffset,elapsed){
-  const text='I love you';
-  g.font=`italic bold ${fontSize.toFixed(1)}px Georgia, serif`;
-  const tw=g.measureText(text).width;
-  const wave=((elapsed*shimSpeed*0.4+shimOffset/(Math.PI*2))%1);
-  const shimX=-tw*0.3+wave*(tw*1.6);
-  const grd=g.createLinearGradient(px-tw/2,0,px+tw/2,0);
-  const base=`rgba(80,150,255,${pointAlpha})`;
-  const mid=`rgba(160,210,255,${Math.min(1,pointAlpha*1.3)})`;
-  const peak=`rgba(230,240,255,${Math.min(1,pointAlpha*1.6)})`;
-  const shine=`rgba(255,255,255,${Math.min(1,pointAlpha*1.9)})`;
-  const rel=p=>Math.max(0,Math.min(1,(shimX/tw)+p/tw));
-  const s0=rel(-tw*0.55),s1=rel(-tw*0.10),s2=rel(0),s3=rel(tw*0.10),s4=rel(tw*0.55);
-  grd.addColorStop(0,base);
-  grd.addColorStop(Math.max(0,s0-0.001),base);
-  grd.addColorStop(s0,mid); grd.addColorStop(s1,peak);
-  grd.addColorStop(s2,shine); grd.addColorStop(s3,peak);
-  grd.addColorStop(Math.min(1,s4+0.001),mid);
-  grd.addColorStop(1,base);
-  g.fillStyle=grd;
-  g.textAlign='center'; g.textBaseline='middle';
-  g.shadowColor=`rgba(60,130,255,${pointAlpha*0.7})`;
-  g.shadowBlur=fontSize*1.1;
-  g.fillText(text,px,py);
-  g.shadowBlur=0;
+// --- resize ---
+window.addEventListener('resize', () => {
+  setDims();
+  buildPts();
+  buildDust();
+});
+
+// --- estados de revelação (tempo real em segundos) ---
+let nameReveal    = 0;
+let msgReveal     = 0;
+let nameGlowPhase = 0;
+const NAME_TIME   = 1.5;  // segundos até nome aparecer
+const MSG_TIME    = 4.0;  // segundos até mensagem aparecer
+
+// --- cache de offscreen para o shimmer (evita shadowBlur pesado a cada frame) ---
+// Renderiza direto mas limita shadowBlur ao essencial
+function drawShimmerText(px, py, fontSize, pointAlpha, shimSpeed, shimOffset, elapsed){
+  const text = 'I love you';
+  g.font = `italic bold ${fontSize.toFixed(1)}px Georgia,serif`;
+  const tw = g.measureText(text).width;
+  const wave  = ((elapsed * shimSpeed * 0.4 + shimOffset / (Math.PI*2)) % 1);
+  const shimX = -tw*0.3 + wave*(tw*1.6);
+
+  const grd = g.createLinearGradient(px - tw/2, 0, px + tw/2, 0);
+  const base  = `rgba(80,150,255,${pointAlpha})`;
+  const mid   = `rgba(160,210,255,${Math.min(1, pointAlpha*1.3)})`;
+  const peak  = `rgba(230,240,255,${Math.min(1, pointAlpha*1.6)})`;
+  const shine = `rgba(255,255,255,${Math.min(1, pointAlpha*1.9)})`;
+  const rel   = p => Math.max(0, Math.min(1, (shimX/tw) + p/tw));
+  const s0=rel(-tw*0.55), s1=rel(-tw*0.10), s2=rel(0), s3=rel(tw*0.10), s4=rel(tw*0.55);
+  grd.addColorStop(0, base);
+  grd.addColorStop(Math.max(0,s0-0.001), base);
+  grd.addColorStop(s0, mid);  grd.addColorStop(s1, peak);
+  grd.addColorStop(s2, shine); grd.addColorStop(s3, peak);
+  grd.addColorStop(Math.min(1,s4+0.001), mid);
+  grd.addColorStop(1, base);
+
+  g.fillStyle = grd;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  // shadowBlur só nas mais opacas pra poupar GPU
+  if(pointAlpha > 0.5){
+    g.shadowColor = `rgba(60,130,255,${pointAlpha*0.5})`;
+    g.shadowBlur  = fontSize * 0.7;
+  }
+  g.fillText(text, px, py);
+  g.shadowBlur = 0;
 }
 
-function drawName(elapsed,reveal){
-  if(reveal<=0) return;
-  nameGlowPhase+=0.03;
-  const glowPulse=0.7+0.3*Math.sin(nameGlowPhase);
-  const shimWave=(elapsed*0.35)%1;
-  const nameFontSize=Math.min(W(),H())*0.11;
-  const nameY=CY()-BSC()*1.5;
+function drawName(elapsed, reveal){
+  if(reveal <= 0) return;
+  nameGlowPhase += 0.03;
+  const glowPulse   = 0.7 + 0.3*Math.sin(nameGlowPhase);
+  const shimWave    = (elapsed * 0.35) % 1;
+  const nameFontSize = Math.min(W, H) * (Math.min(W,H)<500 ? 0.13 : 0.11);
+  const nameY       = CY - BSC * 1.5;
+  const alpha       = Math.min(1, reveal * 1.5);
 
   g.save();
-  g.globalAlpha=Math.min(1,reveal*1.5);
-  g.font=`italic bold ${nameFontSize}px Georgia, serif`;
-  g.textAlign='center';
-  g.textBaseline='middle';
-  const tw=g.measureText('Lorena').width;
+  g.globalAlpha = alpha;
+  g.font = `italic bold ${nameFontSize}px Georgia,serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  const tw = g.measureText('Lorena').width;
 
-  g.shadowColor=`rgba(80,160,255,${0.8*glowPulse})`;
-  g.shadowBlur=nameFontSize*1.8;
-  g.fillStyle=`rgba(180,220,255,${0.15*glowPulse})`;
-  g.fillText('Lorena',CX(),nameY);
+  // glow externo
+  g.shadowColor = `rgba(80,160,255,${0.8*glowPulse})`;
+  g.shadowBlur  = nameFontSize * 1.8;
+  g.fillStyle   = `rgba(180,220,255,${0.15*glowPulse})`;
+  g.fillText('Lorena', CX, nameY);
 
-  g.shadowBlur=nameFontSize*0.9;
-  g.fillStyle='rgba(140,200,255,0.4)';
-  g.fillText('Lorena',CX(),nameY);
-  g.shadowBlur=0;
+  // glow médio
+  g.shadowBlur = nameFontSize * 0.9;
+  g.fillStyle  = 'rgba(140,200,255,0.4)';
+  g.fillText('Lorena', CX, nameY);
+  g.shadowBlur = 0;
 
-  const shimPos=-tw*0.4+shimWave*(tw*1.8);
-  const grd=g.createLinearGradient(CX()-tw/2,0,CX()+tw/2,0);
-  const r=p=>Math.max(0,Math.min(1,(shimPos/tw)+p/tw));
+  // shimmer principal
+  const shimPos = -tw*0.4 + shimWave*(tw*1.8);
+  const grd = g.createLinearGradient(CX-tw/2, 0, CX+tw/2, 0);
+  const r   = p => Math.max(0, Math.min(1, (shimPos/tw)+p/tw));
   const r0=r(-tw*0.45),r1=r(-tw*0.08),r2=r(0),r3=r(tw*0.08),r4=r(tw*0.45);
-  grd.addColorStop(0,'rgba(100,170,255,0.9)');
-  grd.addColorStop(Math.max(0,r0-0.001),'rgba(100,170,255,0.9)');
-  grd.addColorStop(r0,'rgba(180,220,255,1)');
-  grd.addColorStop(r1,'rgba(220,240,255,1)');
-  grd.addColorStop(r2,'rgba(255,255,255,1)');
-  grd.addColorStop(r3,'rgba(220,240,255,1)');
-  grd.addColorStop(Math.min(1,r4+0.001),'rgba(180,220,255,1)');
-  grd.addColorStop(1,'rgba(100,170,255,0.9)');
-  g.fillStyle=grd;
-  g.fillText('Lorena',CX(),nameY);
+  grd.addColorStop(0, 'rgba(100,170,255,0.9)');
+  grd.addColorStop(Math.max(0,r0-0.001), 'rgba(100,170,255,0.9)');
+  grd.addColorStop(r0, 'rgba(180,220,255,1)');
+  grd.addColorStop(r1, 'rgba(220,240,255,1)');
+  grd.addColorStop(r2, 'rgba(255,255,255,1)');
+  grd.addColorStop(r3, 'rgba(220,240,255,1)');
+  grd.addColorStop(Math.min(1,r4+0.001), 'rgba(180,220,255,1)');
+  grd.addColorStop(1, 'rgba(100,170,255,0.9)');
+  g.fillStyle = grd;
+  g.fillText('Lorena', CX, nameY);
 
-  if(reveal>=1){
+  // partículas orbitando
+  if(reveal >= 1){
     for(let i=0;i<6;i++){
-      const angle=(i/6)*Math.PI*2+elapsed*0.8;
-      const radius=tw*0.55+Math.sin(elapsed*1.5+i)*8;
-      const sx=CX()+Math.cos(angle)*radius;
-      const sy=nameY+Math.sin(angle)*nameFontSize*0.35;
-      const sAlpha=(0.4+0.4*Math.sin(elapsed*2+i))*glowPulse;
+      const angle  = (i/6)*Math.PI*2 + elapsed*0.8;
+      const radius = tw*0.55 + Math.sin(elapsed*1.5+i)*8;
+      const sx = CX + Math.cos(angle)*radius;
+      const sy = nameY + Math.sin(angle)*nameFontSize*0.35;
+      const sA = (0.4 + 0.4*Math.sin(elapsed*2+i)) * glowPulse;
       g.beginPath();
-      g.arc(sx,sy,2+Math.sin(elapsed*3+i)*1.2,0,Math.PI*2);
-      g.fillStyle=`rgba(200,230,255,${sAlpha})`;
+      g.arc(sx, sy, 2 + Math.sin(elapsed*3+i)*1.2, 0, Math.PI*2);
+      g.fillStyle = `rgba(200,230,255,${sA})`;
       g.fill();
     }
   }
 
-  if(reveal>0.6){
-    const lineAlpha=(reveal-0.6)/0.4;
-    const lineW=tw*0.6*Math.min(1,(reveal-0.6)/0.3);
-    g.strokeStyle=`rgba(120,190,255,${0.4*lineAlpha})`;
-    g.lineWidth=0.8;
-    g.shadowColor='rgba(100,180,255,0.5)';
-    g.shadowBlur=6;
+  // linha decorativa
+  if(reveal > 0.6){
+    const lineAlpha = (reveal-0.6)/0.4;
+    const lineW     = tw*0.6 * Math.min(1, (reveal-0.6)/0.3);
+    g.strokeStyle = `rgba(120,190,255,${0.4*lineAlpha})`;
+    g.lineWidth   = 0.8;
+    g.shadowColor = 'rgba(100,180,255,0.5)';
+    g.shadowBlur  = 6;
     g.beginPath();
-    g.moveTo(CX()-lineW/2,nameY+nameFontSize*0.62);
-    g.lineTo(CX()+lineW/2,nameY+nameFontSize*0.62);
+    g.moveTo(CX - lineW/2, nameY + nameFontSize*0.62);
+    g.lineTo(CX + lineW/2, nameY + nameFontSize*0.62);
     g.stroke();
-    g.shadowBlur=0;
+    g.shadowBlur = 0;
   }
+
   g.restore();
 }
 
-let T=0;
-function frame(){
-  T++;
-  const elapsed=T/60;
-  if(T>NAME_DELAY) nameReveal=Math.min(1,nameReveal+0.025);
+function drawMessage(elapsed, reveal){
+  if(reveal <= 0) return;
+  const msgFontSize = Math.min(W,H) * (Math.min(W,H)<500 ? 0.045 : 0.036);
+  const nameY       = CY - BSC * 1.5;
+  const nameFontSize= Math.min(W,H) * (Math.min(W,H)<500 ? 0.13 : 0.11);
+  const msgY        = nameY + nameFontSize * 0.9;
+  const alpha       = Math.min(1, reveal * 2);
 
-  g.fillStyle='rgba(0,0,12,0.82)';
-  g.fillRect(0,0,W(),H());
+  // linha 1
+  const pulse = 0.7 + 0.3*Math.sin(elapsed*1.4);
+  g.save();
+  g.globalAlpha = alpha * pulse;
+  g.font = `italic ${msgFontSize}px Georgia,serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.shadowColor = 'rgba(100,180,255,0.7)';
+  g.shadowBlur  = msgFontSize * 1.2;
+  g.fillStyle   = 'rgba(200,230,255,0.9)';
+  g.fillText('Feliz dia dos namorados, minha princesa', CX, msgY);
+  g.shadowBlur  = 0;
 
-  const pulse=Math.sin(elapsed*1.1)*0.5+0.5;
-  const gr1=g.createRadialGradient(CX(),CY()-BSC(),5,CX(),CY(),BSC()*14);
-  gr1.addColorStop(0,`rgba(10,80,200,${0.10+pulse*0.08})`);
-  gr1.addColorStop(0.4,`rgba(0,30,100,${0.05+pulse*0.04})`);
-  gr1.addColorStop(1,'rgba(0,0,20,0)');
-  g.fillStyle=gr1; g.fillRect(0,0,W(),H());
+  // coraçãozinho pulsante entre as frases
+  const hSize = msgFontSize * 1.1;
+  const hPulse = 1 + 0.15*Math.sin(elapsed*2.2);
+  g.save();
+  g.globalAlpha = alpha * 0.85;
+  g.font = `${hSize * hPulse}px Georgia,serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.shadowColor = '#4da6ff';
+  g.shadowBlur  = hSize;
+  g.fillStyle   = '#b3d9ff';
+  g.fillText('♥', CX, msgY + msgFontSize*1.6);
+  g.restore();
 
+  // frase embaixo do coração
+  g.save();
+  g.globalAlpha = alpha * pulse;
+  g.font = `italic ${msgFontSize}px Georgia,serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.shadowColor = 'rgba(100,180,255,0.7)';
+  g.shadowBlur  = msgFontSize * 1.2;
+  g.fillStyle   = 'rgba(200,230,255,0.9)';
+  g.fillText('você é a minha paz', CX, msgY + msgFontSize*3.4);
+  g.shadowBlur  = 0;
+  g.restore();
+}
+
+// --- loop principal ---
+let lastTime = null;
+let elapsed  = 0;
+
+function frame(ts){
+  if(!lastTime) lastTime = ts;
+  const dt  = Math.min((ts - lastTime) / 1000, 0.05); // cap 50ms
+  lastTime  = ts;
+  elapsed  += dt;
+
+  // atualiza revelações por tempo real
+  if(elapsed > NAME_TIME) nameReveal = Math.min(1, nameReveal + dt * 1.2);
+  if(elapsed > MSG_TIME)  msgReveal  = Math.min(1, msgReveal  + dt * 0.8);
+
+  // fundo
+  g.fillStyle = 'rgba(0,0,12,0.82)';
+  g.fillRect(0, 0, W, H);
+
+  // glow central pulsante
+  const pulse = Math.sin(elapsed*1.1)*0.5 + 0.5;
+  const gr1 = g.createRadialGradient(CX, CY-BSC, 5, CX, CY, BSC*14);
+  gr1.addColorStop(0,   `rgba(10,80,200,${0.10+pulse*0.08})`);
+  gr1.addColorStop(0.4, `rgba(0,30,100,${0.05+pulse*0.04})`);
+  gr1.addColorStop(1,   'rgba(0,0,20,0)');
+  g.fillStyle = gr1;
+  g.fillRect(0, 0, W, H);
+
+  // contorno duplo do coração
   for(let layer=0;layer<2;layer++){
-    const lsc=BSC()*(layer===0?1.04:1.0);
-    const la=layer===0?0.07+pulse*0.05:0.18+pulse*0.10;
+    const lsc = BSC*(layer===0?1.04:1.0);
+    const la  = layer===0 ? 0.07+pulse*0.05 : 0.18+pulse*0.10;
     g.save();
-    g.strokeStyle=`rgba(60,140,255,${la})`;
-    g.lineWidth=layer===0?2.5:1.0;
-    g.shadowColor='rgba(60,140,255,0.5)';
-    g.shadowBlur=layer===0?20:6;
+    g.strokeStyle = `rgba(60,140,255,${la})`;
+    g.lineWidth   = layer===0 ? 2.5 : 1.0;
+    g.shadowColor = 'rgba(60,140,255,0.5)';
+    g.shadowBlur  = layer===0 ? 20 : 6;
     g.beginPath();
     for(let i=0;i<=300;i++){
-      const t=(i/300)*Math.PI*2;
-      const p=hpt(t,lsc+Math.sin(elapsed*1.8+t)*0.8);
-      i===0?g.moveTo(p.x,p.y):g.lineTo(p.x,p.y);
+      const t = (i/300)*Math.PI*2;
+      const p = hpt(t, lsc + Math.sin(elapsed*1.8+t)*0.8);
+      i===0 ? g.moveTo(p.x,p.y) : g.lineTo(p.x,p.y);
     }
-    g.closePath(); g.stroke(); g.restore();
-  }
-
-  for(const d of dust){
-    d.a+=d.spd*0.016*60*0.016;
-    d.x+=Math.cos(d.a)*d.spd+d.drift;
-    d.y-=0.12;
-    if(d.y<-5){d.y=H()+5;d.x=Math.random()*W();}
-    if(d.x<0)d.x=W(); if(d.x>W())d.x=0;
-    g.beginPath();
-    g.arc(d.x,d.y,d.r,0,Math.PI*2);
-    g.fillStyle=`rgba(${d.col[0]},${d.col[1]},${d.col[2]},${d.alpha*(0.6+0.4*Math.sin(elapsed*d.spd*10+d.a))})`;
-    g.fill();
-  }
-
-  for(let i=fhearts.length-1;i>=0;i--){
-    const fh=fhearts[i];
-    fh.x+=fh.vx; fh.y+=fh.vy; fh.life++;
-    fh.alpha=fh.life<20?fh.life/20:fh.life>fh.maxLife-30?(fh.maxLife-fh.life)/30:0.7;
-    if(fh.life>=fh.maxLife){fhearts.splice(i,1);spawnFH();continue;}
-    g.save();
-    g.globalAlpha=fh.alpha*0.75;
-    g.font=`${fh.size}px Georgia`;
-    g.textAlign='center';
-    g.shadowColor=fh.col; g.shadowBlur=8;
-    g.fillStyle=fh.col;
-    g.fillText('♥',fh.x,fh.y);
+    g.closePath();
+    g.stroke();
     g.restore();
   }
 
-  for(const p of pts){
-    const fx=Math.cos(p.floatF*elapsed+p.floatP)*p.floatA;
-    const fy=Math.sin(p.floatFy*elapsed+p.floatPy)*p.floatAy;
-    drawShimmerText(p.x+fx,p.y+fy,p.fs,p.alpha,p.shimSpeed,p.shimOffset,elapsed);
+  // poeira
+  for(const d of dust){
+    d.a += d.spd * 0.016;
+    d.x += Math.cos(d.a)*d.spd + d.drift;
+    d.y -= 0.12;
+    if(d.y < -5){ d.y = H+5; d.x = Math.random()*W; }
+    if(d.x < 0) d.x = W;
+    if(d.x > W) d.x = 0;
+    g.beginPath();
+    g.arc(d.x, d.y, d.r, 0, Math.PI*2);
+    g.fillStyle = `rgba(${d.col[0]},${d.col[1]},${d.col[2]},${d.alpha*(0.6+0.4*Math.sin(elapsed*d.spd*10+d.a))})`;
+    g.fill();
   }
 
-  drawName(elapsed,nameReveal);
+  // corações flutuantes
+  for(let i=fhearts.length-1; i>=0; i--){
+    const fh = fhearts[i];
+    fh.x += fh.vx; fh.y += fh.vy; fh.life++;
+    fh.alpha = fh.life<20 ? fh.life/20 : fh.life>fh.maxLife-30 ? (fh.maxLife-fh.life)/30 : 0.7;
+    if(fh.life >= fh.maxLife){ fhearts.splice(i,1); spawnFH(); continue; }
+    g.save();
+    g.globalAlpha = fh.alpha * 0.75;
+    g.font = `${fh.size}px Georgia,serif`;
+    g.textAlign = 'center';
+    g.shadowColor = fh.col;
+    g.shadowBlur  = 8;
+    g.fillStyle   = fh.col;
+    g.fillText('♥', fh.x, fh.y);
+    g.restore();
+  }
+
+  // textos "I love you" com shimmer
+  for(const p of pts){
+    const fx = Math.cos(p.floatF*elapsed  + p.floatP)  * p.floatA;
+    const fy = Math.sin(p.floatFy*elapsed + p.floatPy) * p.floatAy;
+    drawShimmerText(p.x+fx, p.y+fy, p.fs, p.alpha, p.shimSpeed, p.shimOffset, elapsed);
+  }
+
+  // nome e mensagem
+  drawName(elapsed, nameReveal);
+  drawMessage(elapsed, msgReveal);
+
   requestAnimationFrame(frame);
 }
-frame();
+requestAnimationFrame(frame);
 })();
 </script>
 </body>
